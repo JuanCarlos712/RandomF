@@ -56,16 +56,17 @@
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
         {% endif %}
+        
         {% if info %}
             <div class="alert alert-info alert-dismissible fade show" role="alert">
-        {{ info }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                {{ info }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
         {% endif %}
-
+        
         {% if classes %}
             <div class="alert alert-secondary">
-            <strong>Clases detectadas:</strong> {{ classes|join:", " }}
+                <strong>Clases detectadas:</strong> {{ classes|join:", " }}
             </div>
         {% endif %}
         
@@ -181,5 +182,4 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
-
 </html>
