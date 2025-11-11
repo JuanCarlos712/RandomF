@@ -11,6 +11,8 @@ from sklearn.metrics import f1_score, classification_report, confusion_matrix
 import io
 import base64
 import os
+import gdown
+import tempfile
 from django.shortcuts import render
 from django.conf import settings
 
@@ -19,15 +21,18 @@ def home(request):
     
     if request.method == 'POST' or 'train' in request.GET:
         try:
-            # Ruta al dataset
-            csv_path = os.path.join(settings.BASE_DIR, 'TotalFeatures-ISCXFlowMeter.csv')
+            # File ID de tu Google Drive (extraído del link)
+            file_id = '1damckL9bh8APnI8lLbzs2f7R0Tblroq4'
+            download_url = f'https://drive.google.com/uc?id={file_id}'
             
-            if not os.path.exists(csv_path):
-                context['error'] = f"Dataset no encontrado en: {csv_path}"
-                return render(request, 'detection_app/results.html', context)
+            # Descargar dataset
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as tmp_file:
+                output_path = tmp_file.name
             
-            # Cargar y preparar datos
-            df = pd.read_csv(csv_path)
+            gdown.download(download_url, output_path, quiet=True)
+            
+            # Cargar y procesar datos
+            df = pd.read_csv(output_path)
             X = df.drop('calss', axis=1)
             y = df['calss'].factorize()[0]
             
@@ -71,6 +76,9 @@ def home(request):
                 'plots': plots,
                 'top_features': top_features
             })
+            
+            # Limpiar archivo temporal
+            os.unlink(output_path)
             
         except Exception as e:
             context['error'] = f"Error durante el entrenamiento: {str(e)}"
