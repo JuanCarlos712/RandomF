@@ -55,14 +55,14 @@ def home(request):
             # Cargar datos con manejo de errores
             try:
                 # Intentar cargar con diferentes configuraciones
-                df = pd.read_csv(csv_path, error_bad_lines=False, warn_bad_lines=True)
-            except:
+                df = pd.read_csv(csv_path, on_bad_lines='skip')
+            except Exception as e:
                 try:
                     # Si falla, intentar con engine python
-                    df = pd.read_csv(csv_path, error_bad_lines=False, engine='python')
-                except:
+                    df = pd.read_csv(csv_path, on_bad_lines='skip', engine='python')
+                except Exception as e:
                     # Si sigue fallando, usar separador por defecto
-                    df = pd.read_csv(csv_path, sep=None, engine='python', error_bad_lines=False)
+                    df = pd.read_csv(csv_path, sep=None, engine='python', on_bad_lines='skip')
             
             # Verificar que se cargaron datos
             if df.empty:
@@ -71,7 +71,7 @@ def home(request):
             # Verificar que existe la columna 'calss'
             if 'calss' not in df.columns:
                 # Buscar columnas que puedan ser la target
-                possible_targets = ['calss', 'class', 'target', 'label', 'type']
+                possible_targets = ['calss', 'class', 'target', 'label', 'type', 'Category']
                 target_col = None
                 for col in possible_targets:
                     if col in df.columns:
@@ -89,9 +89,9 @@ def home(request):
             df = df.dropna(subset=['calss'])
             
             # Si el dataset es muy grande, tomar una muestra para testing
-            if len(df) > 10000:
-                df = df.sample(n=10000, random_state=42)
-                context['info'] = "Se usó una muestra de 10,000 registros para entrenamiento rápido"
+            if len(df) > 5000:
+                df = df.sample(n=5000, random_state=42)
+                context['info'] = "Se usó una muestra de 5,000 registros para entrenamiento rápido"
             
             X = df.drop('calss', axis=1)
             y = df['calss']
@@ -150,8 +150,6 @@ def home(request):
             
         except Exception as e:
             context['error'] = f"Error durante el entrenamiento: {str(e)}"
-            # Debug: imprimir información del error
-            print(f"DEBUG ERROR: {str(e)}")
     
     return render(request, 'detection_app/results.html', context)
 
