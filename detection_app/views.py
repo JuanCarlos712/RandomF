@@ -52,8 +52,17 @@ def home(request):
             if file_size == 0:
                 raise Exception("El archivo descargado está vacío")
             
-            # Cargar y procesar datos
-            df = pd.read_csv(csv_path)
+            # Cargar datos con manejo de errores
+            try:
+                # Intentar cargar con diferentes configuraciones
+                df = pd.read_csv(csv_path, error_bad_lines=False, warn_bad_lines=True)
+            except:
+                try:
+                    # Si falla, intentar con engine python
+                    df = pd.read_csv(csv_path, error_bad_lines=False, engine='python')
+                except:
+                    # Si sigue fallando, usar separador por defecto
+                    df = pd.read_csv(csv_path, sep=None, engine='python', error_bad_lines=False)
             
             # Verificar que se cargaron datos
             if df.empty:
@@ -61,14 +70,42 @@ def home(request):
             
             # Verificar que existe la columna 'calss'
             if 'calss' not in df.columns:
-                raise Exception(f"Columna 'calss' no encontrada. Columnas disponibles: {list(df.columns)}")
+                # Buscar columnas que puedan ser la target
+                possible_targets = ['calss', 'class', 'target', 'label', 'type']
+                target_col = None
+                for col in possible_targets:
+                    if col in df.columns:
+                        target_col = col
+                        break
+                
+                if target_col:
+                    # Renombrar la columna a 'calss'
+                    df = df.rename(columns={target_col: 'calss'})
+                    context['info'] = f"Se usó la columna '{target_col}' como objetivo"
+                else:
+                    raise Exception(f"Columna 'calss' no encontrada. Columnas disponibles: {list(df.columns)}")
+            
+            # Limpiar datos: eliminar filas con valores NaN en la columna target
+            df = df.dropna(subset=['calss'])
+            
+            # Si el dataset es muy grande, tomar una muestra para testing
+            if len(df) > 10000:
+                df = df.sample(n=10000, random_state=42)
+                context['info'] = "Se usó una muestra de 10,000 registros para entrenamiento rápido"
             
             X = df.drop('calss', axis=1)
-            y = df['calss'].factorize()[0]
+            y = df['calss']
+            
+            # Convertir labels a numéricos
+            y_encoded, classes = pd.factorize(y)
+            
+            # Verificar que hay al menos 2 clases
+            if len(classes) < 2:
+                raise Exception(f"Solo se encontró una clase: {classes}. Se necesitan al menos 2 clases.")
             
             # Dividir datos
             X_train, X_test, y_train, y_test = train_test_split(
-                X, y, test_size=0.3, random_state=42, stratify=y
+                X, y_encoded, test_size=0.3, random_state=42, stratify=y_encoded
             )
             
             # Escalar
@@ -78,7 +115,7 @@ def home(request):
             
             # Entrenar Random Forest
             model = RandomForestClassifier(
-                n_estimators=50,  # Reducido para testing
+                n_estimators=50,  # Reducido para testing rápido
                 random_state=42,
                 n_jobs=-1
             )
@@ -91,7 +128,7 @@ def home(request):
             cm = confusion_matrix(y_test, y_pred)
             
             # Crear gráficas
-            plots = create_plots(model, X.columns, f1, report, cm)
+            plots = create_plots(model, X.columns, f1, report, cm, classes)
             
             # Top características
             feature_importance = dict(zip(X.columns, model.feature_importances_))
@@ -104,7 +141,8 @@ def home(request):
                 'precision': round(report['weighted avg']['precision'], 4),
                 'recall': round(report['weighted avg']['recall'], 4),
                 'plots': plots,
-                'top_features': top_features
+                'top_features': top_features,
+                'classes': list(classes)
             })
             
             # Limpiar archivo temporal
@@ -117,7 +155,7 @@ def home(request):
     
     return render(request, 'detection_app/results.html', context)
 
-def create_plots(model, feature_names, f1_score, report, cm):
+def create_plots(model, feature_names, f1_score, report, cm, classes):
     """Crea las gráficas para mostrar"""
     plots = {}
     
@@ -140,7 +178,8 @@ def create_plots(model, feature_names, f1_score, report, cm):
     
     # 2. Matriz de confusión
     plt.figure(figsize=(8, 6))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+                xticklabels=classes, yticklabels=classes)
     plt.title('Matriz de Confusión - Random Forest')
     plt.ylabel('Valor Real')
     plt.xlabel('Predicción')
