@@ -11,7 +11,7 @@ from sklearn.metrics import f1_score, classification_report, confusion_matrix
 import io
 import base64
 import os
-import gdown
+import requests
 import tempfile
 from django.shortcuts import render
 from django.conf import settings
@@ -21,18 +21,48 @@ def home(request):
     
     if request.method == 'POST' or 'train' in request.GET:
         try:
-            # File ID de tu Google Drive (extraído del link)
+            # URL directa de descarga de Google Drive
             file_id = '1damckL9bh8APnI8lLbzs2f7R0Tblroq4'
-            download_url = f'https://drive.google.com/uc?id={file_id}'
+            download_url = f'https://drive.google.com/uc?export=download&id={file_id}'
             
             # Descargar dataset
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as tmp_file:
-                output_path = tmp_file.name
+            session = requests.Session()
+            response = session.get(download_url, stream=True)
             
-            gdown.download(download_url, output_path, quiet=True)
+            # Manejar archivos grandes de Google Drive
+            token = None
+            for key, value in response.cookies.items():
+                if key.startswith('download_warning'):
+                    token = value
+                    break
+            
+            if token:
+                download_url = f'https://drive.google.com/uc?export=download&confirm={token}&id={file_id}'
+                response = session.get(download_url, stream=True)
+            
+            # Guardar archivo temporal
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as tmp_file:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        tmp_file.write(chunk)
+                csv_path = tmp_file.name
+            
+            # Verificar que el archivo no esté vacío
+            file_size = os.path.getsize(csv_path)
+            if file_size == 0:
+                raise Exception("El archivo descargado está vacío")
             
             # Cargar y procesar datos
-            df = pd.read_csv(output_path)
+            df = pd.read_csv(csv_path)
+            
+            # Verificar que se cargaron datos
+            if df.empty:
+                raise Exception("No se pudieron cargar datos del archivo CSV")
+            
+            # Verificar que existe la columna 'calss'
+            if 'calss' not in df.columns:
+                raise Exception(f"Columna 'calss' no encontrada. Columnas disponibles: {list(df.columns)}")
+            
             X = df.drop('calss', axis=1)
             y = df['calss'].factorize()[0]
             
@@ -48,7 +78,7 @@ def home(request):
             
             # Entrenar Random Forest
             model = RandomForestClassifier(
-                n_estimators=100,
+                n_estimators=50,  # Reducido para testing
                 random_state=42,
                 n_jobs=-1
             )
@@ -78,10 +108,12 @@ def home(request):
             })
             
             # Limpiar archivo temporal
-            os.unlink(output_path)
+            os.unlink(csv_path)
             
         except Exception as e:
             context['error'] = f"Error durante el entrenamiento: {str(e)}"
+            # Debug: imprimir información del error
+            print(f"DEBUG ERROR: {str(e)}")
     
     return render(request, 'detection_app/results.html', context)
 
