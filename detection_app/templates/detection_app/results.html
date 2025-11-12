@@ -1,185 +1,43 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Detección de Malware - Random Forest</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        .plot-img {
-            max-width: 100%;
-            height: auto;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-        .metric-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 15px;
-            border: none;
-            transition: transform 0.3s ease;
-        }
-        .metric-card:hover {
-            transform: translateY(-5px);
-        }
-        .feature-item {
-            border-left: 4px solid #667eea;
-            transition: all 0.3s ease;
-        }
-        .feature-item:hover {
-            background-color: #f8f9fa;
-            border-left-color: #764ba2;
-        }
-        .btn-train {
-            background: linear-gradient(135deg, #FF6B6B 0%, #4ECDC4 100%);
-            border: none;
-            padding: 15px 30px;
-            font-size: 1.2em;
-            border-radius: 50px;
-            transition: all 0.3s ease;
-        }
-        .btn-train:hover {
-            transform: scale(1.05);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
-        }
-    </style>
-</head>
-<body class="bg-light">
-    <div class="container mt-5">
-        <div class="text-center mb-5">
-            <h1 class="display-4 text-primary">🔍 Detección de Malware</h1>
-            <p class="lead text-muted">Análisis con algoritmo Random Forest</p>
-        </div>
-        
-        {% if error %}
-            <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                {{ error }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        {% endif %}
-        
-        {% if info %}
-            <div class="alert alert-info alert-dismissible fade show" role="alert">
-                {{ info }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        {% endif %}
-        
-        {% if classes %}
-            <div class="alert alert-secondary">
-                <strong>Clases detectadas:</strong> {{ classes|join:", " }}
-            </div>
-        {% endif %}
-        
-        <div class="text-center mb-5">
-            <form method="post">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-train text-white">
-                    🚀 Entrenar Modelo Random Forest
-                </button>
-            </form>
-            <small class="text-muted d-block mt-2">
-                El entrenamiento puede tomar algunos minutos...
-            </small>
-        </div>
-        
-        {% if trained %}
-        <!-- Métricas -->
-        <div class="row mb-5">
-            <div class="col-md-4 mb-3">
-                <div class="card metric-card text-center p-4">
-                    <div class="card-body">
-                        <h4>🎯 F1-Score</h4>
-                        <h2 class="display-4">{{ f1_score }}</h2>
-                        <p class="mb-0">Puntuación balanceada</p>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4 mb-3">
-                <div class="card metric-card text-center p-4">
-                    <div class="card-body">
-                        <h4>📊 Precisión</h4>
-                        <h2 class="display-4">{{ precision }}</h2>
-                        <p class="mb-0">Exactitud en predicciones</p>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4 mb-3">
-                <div class="card metric-card text-center p-4">
-                    <div class="card-body">
-                        <h4>🔍 Recall</h4>
-                        <h2 class="display-4">{{ recall }}</h2>
-                        <p class="mb-0">Capacidad de detección</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Gráficas -->
-        <div class="row">
-            <div class="col-lg-6 mb-4">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0">📈 Importancia de Características (Top 10)</h5>
-                    </div>
-                    <div class="card-body">
-                        <img src="data:image/png;base64,{{ plots.feature_importance }}" 
-                             class="plot-img" 
-                             alt="Importancia de Características">
-                    </div>
-                </div>
-            </div>
-            
-            <div class="col-lg-6 mb-4">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-success text-white">
-                        <h5 class="mb-0">🎯 Matriz de Confusión</h5>
-                    </div>
-                    <div class="card-body">
-                        <img src="data:image/png;base64,{{ plots.confusion_matrix }}" 
-                             class="plot-img" 
-                             alt="Matriz de Confusión">
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="row">
-            <div class="col-lg-6 mb-4">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-info text-white">
-                        <h5 class="mb-0">📊 Métricas del Modelo</h5>
-                    </div>
-                    <div class="card-body">
-                        <img src="data:image/png;base64,{{ plots.metrics }}" 
-                             class="plot-img" 
-                             alt="Métricas del Modelo">
-                    </div>
-                </div>
-            </div>
-            
-            <div class="col-lg-6 mb-4">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-warning text-dark">
-                        <h5 class="mb-0">⭐ Top 5 Características Más Importantes</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="list-group">
-                            {% for feature, importance in top_features.items %}
-                            <div class="list-group-item feature-item d-flex justify-content-between align-items-center">
-                                <span class="fw-bold">{{ feature }}</span>
-                                <span class="badge bg-primary rounded-pill fs-6">
-                                    {{ importance|floatformat:4 }}
-                                </span>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+<!-- Añade esto después del título -->
+<div class="text-center mb-3">
+    <span class="badge bg-info fs-6">
+        📊 Modelos guardados: {{ total_models }}
+    </span>
+</div>
+
+<!-- Añade esto después de las alertas -->
+{% if new_model %}
+    <div class="alert alert-success text-center">
+        <strong>✅ Nuevo modelo entrenado y guardado!</strong>
+    </div>
+{% elif trained and not new_model %}
+    <div class="alert alert-info text-center">
+        <strong>🔍 Modelo pre-entrenado cargado</strong>
+        {% if created_at %}
+            <br><small>Entrenado el: {{ created_at }}</small>
         {% endif %}
     </div>
+{% endif %}
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+<!-- Añade información del modelo -->
+{% if trained %}
+<div class="card mb-4">
+    <div class="card-header bg-dark text-white">
+        <h5 class="mb-0">🤖 Información del Modelo</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <strong>Nombre:</strong> {{ model_name }}<br>
+                <strong>Clases:</strong> {{ classes|join:", " }}
+            </div>
+            <div class="col-md-6">
+                {% if n_estimators %}
+                    <strong>Árboles:</strong> {{ n_estimators }}<br>
+                    <strong>Profundidad:</strong> {{ max_depth|default:"Sin límite" }}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
